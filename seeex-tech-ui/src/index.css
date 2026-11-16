@@ -1,0 +1,10 @@
+﻿@import "tailwindcss";
+:root { font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; color: #1d2129; background: #f5f7fa; font-synthesis: none; text-rendering: optimizeLegibility; }
+* { box-sizing: border-box; } body { margin: 0; min-width: 320px; } button { font-family: inherit; }
+#root { min-height: 100vh; }
+
+.sidebar-feedback { padding: 20px 12px; }
+.route-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.route-form-grid > label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--color-text-2); }
+.route-form-grid .arco-input-number, .route-form-grid .arco-select, .route-form-grid .arco-tree-select { width: 100%; }
+@media (max-width: 640px) { .route-form-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -1,0 +1,29 @@
+# 本地环境和凭证
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+# 工具状态和构建产物
+**/.git/
+.idea/
+**/.idea/
+.superpowers/
+**/.superpowers/
+.codex/
+**/.codex/
+.agents/
+**/.agents/
+node_modules/
+**/node_modules/
+target/
+**/target/
+dist/
+**/dist/
+build/
+**/build/
+*.log
+.DS_Store
+*.tsbuildinfo

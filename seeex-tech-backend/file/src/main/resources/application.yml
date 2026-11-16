@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: seeex-tech-file
+  main:
+    web-application-type: servlet
+server:
+  port: ${FILE_SERVER_PORT:8081}
+spring.datasource.url: ${DB_URL:jdbc:mysql://localhost:3306/seeex?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+spring.datasource.username: ${DB_USERNAME:root}
+spring.datasource.password: ${DB_PASSWORD:root}
+aliyun:
+  oss:
+    endpoint: ${ALIYUN_OSS_ENDPOINT:}
+    bucket: ${ALIYUN_OSS_BUCKET:}
+    region: ${ALIYUN_OSS_REGION:}
+    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+    private-bucket: ${ALIYUN_OSS_PRIVATE_BUCKET:true}
+management:
+  endpoints.web.exposure.include: health,info,metrics
+file:
+  service-token: ${FILE_SERVICE_TOKEN:dev-only-token}
+
