@@ -19,5 +19,5 @@ aliyun:
 management:
   endpoints.web.exposure.include: health,info,metrics
 file:
-  service-token: ${FILE_SERVICE_TOKEN:dev-only-token}
+  service-token: ${FILE_SERVICE_TOKEN:}
 

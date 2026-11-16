@@ -1,4 +1,7 @@
 spring:
+  http:
+    converters:
+      preferred-json-mapper: jackson2
   application:
     name: seeex-tech-web
   datasource:
@@ -14,7 +17,7 @@ spring:
     locations: classpath:db/migration
 file-service:
   base-url: ${FILE_SERVICE_BASE_URL:http://localhost:8081}
-  token: ${FILE_SERVICE_TOKEN:dev-only-token}
+  token: ${FILE_SERVICE_TOKEN:}
 wecom:
   base-url: ${WECOM_BASE_URL:https://qyapi.weixin.qq.com}
   corp-id: ${WECOM_CORP_ID:}
@@ -26,3 +29,18 @@ wecom:
 management:
   endpoints.web.exposure.include: health,info,metrics,prometheus
   endpoint.health.show-details: when-authorized
+
+onboarding:
+  portal-url: ${APP_ONBOARDING_PORTAL_URL:}
+  delivery-key: ${APP_DELIVERY_KEY:}
+  delivery-key-id: ${APP_DELIVERY_KEY_ID:v1}
+  wecom-notifications-enabled: ${APP_ONBOARDING_WECOM_NOTIFICATIONS:false}
+
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:}
+bootstrap:
+  admin:
+    enabled: ${BOOTSTRAP_ADMIN_ENABLED:false}
+    login: ${BOOTSTRAP_ADMIN_LOGIN:admin}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}

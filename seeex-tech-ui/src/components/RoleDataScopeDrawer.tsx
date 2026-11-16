@@ -1,6 +1,7 @@
 import { Alert, Button, Drawer, Message, Modal, Select, Space, Table, TreeSelect } from '@arco-design/web-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useDraftGuard } from './DraftGuard'
 import { api, getApiMessage, notifyApiError } from '../lib/api'
 import { loadAll, treeNodes } from '../lib/management'
 interface ScopeView { items: Scope[]; version: number }
@@ -13,6 +14,7 @@ export function RoleDataScopeDrawer({ roleId, onClose }: { roleId: number; onClo
   const [expectedVersion,setVersion] = useState<number>()
   const [resourceCode,setResource] = useState<string>(), [scopeType,setScope] = useState('SELF'), [departmentIds,setDepartments] = useState<string[]>([]), [employeeIds,setEmployees] = useState<number[]>([])
   const save = useMutation({ mutationFn: (remove: boolean) => remove ? api.delete(endpoint,{params:{resourceCode,expectedVersion}}) : api.put(endpoint,{resourceCode,scopeType,departmentIds:departmentIds.map(Number),employeeIds,expectedVersion}), onSuccess: async () => { Message.success('数据范围已保存'); await client.invalidateQueries(); setResource(undefined); setDepartments([]); setEmployees([]) }, onError: (error) => notifyApiError(error) })
+  useDraftGuard(resourceCode !== undefined, save.isPending)
   const blocked = !scopes.isSuccess || !dictionaries.isSuccess || save.isPending || dictionaries.isFetching || scopes.isFetching
   function selectResource(value: string) { setResource(value); setVersion(scopes.data?.version); const row = scopes.data?.items.find((item) => item.resourceCode === value); try { const config = JSON.parse(row?.scopeConfig || '{}') as { departmentIds?: number[]; employeeIds?: number[] }; setScope(row?.scopeType ?? 'SELF'); setDepartments((config.departmentIds ?? []).map(String)); setEmployees(config.employeeIds ?? []) } catch { notifyApiError(new Error('原范围格式无效')); setResource(undefined) } }
   return <Drawer width={760} visible title="角色数据范围" confirmLoading={save.isPending} maskClosable={!save.isPending} closable={!save.isPending} onCancel={() => { if (!save.isPending) { if (resourceCode) Modal.confirm({title:'放弃当前范围草稿？',onOk:onClose}); else onClose() } }} okButtonProps={{disabled:blocked || !resourceCode}} onOk={() => { if (!blocked && resourceCode) Modal.confirm({title:'保存当前资源范围？',content:'角色范围取并集，ALL 将允许全部行。功能权限仍需另行授权。',onOk:()=>save.mutateAsync(false)}) }}>

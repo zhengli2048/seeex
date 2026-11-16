@@ -35,6 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /** 应用注册、持久化版本发布、权限菜单和单次 SSO 交换服务。 */
 @Service
 public class ApplicationRegistryService {
+    @Autowired private com.seeex.tech.web.onboarding.OnboardingReservationMapper reservations;
+    @Autowired private com.seeex.tech.web.organization.mapper.EmployeeMapper owners;
     private static final long CODE_TTL = 60;
     private static final int FULL_ROLLOUT = 100;
     /** 导航祖先校验的最大深度。 */
@@ -65,13 +67,32 @@ public class ApplicationRegistryService {
 
     /** 注册应用；明文 CI 凭证仅在此响应中返回。 */
     @Transactional
-    public AppRegistration register(RegisterAppCommand command) {
+    public AppRegistration register(RegisterAppCommand command) { return registerInternal(command,null); }
+
+    /** 已批准申请首次注册，仍复用统一凭证生成和字段校验。 */
+    @Transactional
+    public AppRegistration registerForRequest(RegisterAppCommand command,Long requestId) {
+        if(requestId==null) throw new BizException(ErrorCode.FORBIDDEN,"缺少批准申请关联");
+        return registerInternal(command,requestId);
+    }
+
+    private AppRegistration registerInternal(RegisterAppCommand command,Long requestId) {
         if (command.appCode() == null || !command.appCode().matches("[a-z][a-z0-9-]{1,63}")) {
             invalid("应用编码须为 2–64 位小写字母、数字或连字符");
         }
         if ("platform".equals(command.appCode())) { invalid("platform 为基础平台保留编码"); }
         if (findApp(command.appCode()) != null) { throw new BizException(ErrorCode.CONFLICT, "应用编码已存在"); }
+        if(reservations!=null) {
+            var reserved=reservations.selectById(command.appCode());
+            if(reserved!=null && !java.util.Objects.equals(reserved.getRequestId(),requestId) || requestId!=null && reserved==null) throw new BizException(ErrorCode.CONFLICT,"应用编码已被申请预留或批准记录不匹配");
+            if(requestId==null && reserved==null) {
+                var owner=new com.seeex.tech.web.onboarding.OnboardingReservationDO(); owner.setAppCode(command.appCode());
+                owner.setRequestId(-1L-new java.security.SecureRandom().nextLong(Long.MAX_VALUE));
+                reservations.insert(owner);
+            }
+        }
         ApplicationDO row = new ApplicationDO();
+        row.setOriginatingRequestId(requestId); row.setInitialDeliveryPending(requestId!=null);
         row.setAppCode(command.appCode());
         apply(row, command);
         String token = newToken();
@@ -89,6 +110,7 @@ public class ApplicationRegistryService {
     @Transactional
     public AppView update(String appCode, RegisterAppCommand command) {
         ApplicationDO row = requireApp(appCode);
+        requireReceived(row);
         if (command.appCode() != null && !appCode.equals(command.appCode())) { invalid("应用编码不可修改"); }
         apply(row, command);
         saveApp(row);
@@ -136,11 +158,25 @@ public class ApplicationRegistryService {
     @Transactional
     public String rotateCiToken(String appCode) {
         ApplicationDO app = requireApp(appCode);
+        requireReceived(app);
         String token = newToken();
         app.setCiTokenHash(hash(token));
         saveApp(app);
         return token;
     }
+
+    /** 待收件的受控补发只由申请办理服务调用，明文不得通过普通应用接口返回。 */
+    @Transactional
+    public AppRegistration reissueForRequest(String appCode,long requestId) {
+        var app=requireApp(appCode); if(!Boolean.TRUE.equals(app.getInitialDeliveryPending()) || !java.util.Objects.equals(app.getOriginatingRequestId(),requestId))throw new BizException(ErrorCode.CONFLICT,"申请与首次交付状态不匹配");
+        String ci=newToken(),secret="app_"+UUID.randomUUID().toString().replace("-",""); app.setCiTokenHash(hash(ci)); app.setClientSecretHash(hash(secret)); saveApp(app); return new AppRegistration(view(app),ci,secret);
+    }
+    /** 收件与首次交付门禁解除在同一事务，来源申请不可替换。 */
+    @Transactional
+    public void confirmRequestDelivery(String appCode,long requestId) {
+        if(applicationMapper.update(null,Wrappers.<ApplicationDO>lambdaUpdate().eq(ApplicationDO::getAppCode,appCode).eq(ApplicationDO::getOriginatingRequestId,requestId).eq(ApplicationDO::getInitialDeliveryPending,true).set(ApplicationDO::getInitialDeliveryPending,false))!=1)throw new BizException(ErrorCode.CONFLICT,"首次交付状态已变化，请重新载入");
+    }
+    private void requireReceived(ApplicationDO app) { if(Boolean.TRUE.equals(app.getInitialDeliveryPending()))throw new BizException(ErrorCode.CONFLICT,"首次交付尚未确认；请通过申请流程领取、确认或补发后再修改应用和轮换凭证"); }
 
     /** 持久化审核结论；当前发布版本不可直接拒绝。 */
     @Transactional
@@ -347,7 +383,7 @@ public class ApplicationRegistryService {
     /** 轮换应用后端凭证，旧凭证立即失效。 */
     @Transactional
     public String rotateClientSecret(String appCode) {
-        ApplicationDO app = requireApp(appCode); String secret = "app_" + UUID.randomUUID().toString().replace("-", "");
+        ApplicationDO app = requireApp(appCode); requireReceived(app); String secret = "app_" + UUID.randomUUID().toString().replace("-", "");
         app.setClientSecretHash(hash(secret)); saveApp(app); return secret;
     }
 
@@ -399,6 +435,7 @@ public class ApplicationRegistryService {
     }
 
     private void apply(ApplicationDO row, RegisterAppCommand command) {
+        if(command.ownerEmployeeId()!=null && owners!=null) { var owner=owners.selectById(command.ownerEmployeeId()); if(owner==null || owner.getDeletedAt()!=null || !"ACTIVE".equals(owner.getStatus()))invalid("应用负责人不存在或已停用"); }
         text(command.name(), 128, "应用名称"); url(command.baseUrl(), true); url(command.adminUrl(), false);
         url(command.apiUrl(), false); url(command.repositoryUrl(), false); url(command.logo(), false);
         String status = command.status() == null ? "ACTIVE" : command.status();
@@ -433,7 +470,7 @@ public class ApplicationRegistryService {
     private AppView view(ApplicationDO row) {
         ApplicationRouteReleaseDO release = row.getActiveVersion() == null ? null : findRelease(row.getAppCode(), row.getActiveVersion());
         return new AppView(row.getAppCode(), row.getAppName(), row.getBaseUrl(), row.getRepositoryUrl(), release == null ? null : releaseView(release),
-                row.getDescription(), row.getAppType(), row.getLogo(), row.getOwnerEmployeeId(), row.getStatus(), row.getAdminUrl(), row.getApiUrl(), row.getSsoCallbackPath());
+                row.getDescription(), row.getAppType(), row.getLogo(), row.getOwnerEmployeeId(), row.getStatus(), row.getAdminUrl(), row.getApiUrl(), row.getSsoCallbackPath(),Boolean.TRUE.equals(row.getInitialDeliveryPending()));
     }
     private MetadataRelease releaseView(ApplicationRouteReleaseDO row) {
         try {
@@ -477,7 +514,7 @@ public class ApplicationRegistryService {
             List<RouteMetadata> routes, boolean published, Instant reportedAt, String approvalStatus, int rolloutPercent) { }
     /** 无凭证的应用视图。 */
     public record AppView(String appCode, String name, String baseUrl, String repositoryUrl, MetadataRelease release,
-            String description, String type, String logo, Long ownerEmployeeId, String status, String adminUrl, String apiUrl, String ssoCallbackPath) { }
+            String description, String type, String logo, Long ownerEmployeeId, String status, String adminUrl, String apiUrl, String ssoCallbackPath,boolean initialDeliveryPending) { }
     /** 当前用户可见菜单。 */
     public record MenuView(String appCode, String appName, String baseUrl, RouteMetadata route) { }
     /** 交换后的短期身份，目标应用建立自身会话。 */

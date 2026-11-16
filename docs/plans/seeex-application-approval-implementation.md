@@ -1,5 +1,7 @@
 # 新应用申请审批实施与验收计划
 
+> 2026-11-17实现更新：申请/审批/办理/定向交付已补充源码，实际采用受限顺序状态机与Arco配置器，并非Flowable/BPMN；原计划保留为设计依据，当前范围、API及未实施扩展见 [按钮契约](../plans/seeex-onboarding-button-contract.md)。本轮仍未运行验收。
+
 2026-11-16。本文件只制定后续实施步骤。本轮没有开发业务代码、引入引擎依赖、生成/执行迁移或运行验证。
 
 输入：[已确认需求和设计](../design/12-application-approval-workflow.md)、[组件调研](../research/approval-workflow-components.md)。场景为新应用接入申请，审批后平台办理，原申请人定向领取。

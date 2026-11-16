@@ -17,8 +17,9 @@ public class JwtService {
     private final byte[] secret;
     private final ObjectMapper mapper;
 
-    public JwtService(@Value("${auth.jwt.secret:change-me-in-production-to-a-32-byte-secret}") String secret,
+    public JwtService(@Value("${auth.jwt.secret:}") String secret,
                       ObjectMapper mapper) {
+        if(secret==null || secret.getBytes(StandardCharsets.UTF_8).length<32 || "change-me-in-production-to-a-32-byte-secret".equals(secret)) throw new com.seeex.tech.common.exception.BizException(com.seeex.tech.common.api.ErrorCode.BUSINESS_ERROR,"请配置至少32字节的独立AUTH_JWT_SECRET");
         this.secret = secret.getBytes(StandardCharsets.UTF_8);
         this.mapper = mapper;
     }
@@ -31,11 +32,15 @@ public class JwtService {
 
     public Map<String, Object> verify(String token) {
         try {
+            if(token==null || token.length()>8192) throw new IllegalArgumentException();
             String[] parts = token.split("\\.");
             if (parts.length != 3 || !constantTime(parts[2], sign(parts[0] + "." + parts[1]))) throw new IllegalArgumentException();
+            var header=mapper.readTree(Base64.getUrlDecoder().decode(parts[0]));
+            if(!"HS256".equals(header.path("alg").asText()) || !"JWT".equals(header.path("typ").asText())) throw new IllegalArgumentException();
             Map<String, Object> claims = mapper.readValue(Base64.getUrlDecoder().decode(parts[1]), Map.class);
             Number exp = (Number) claims.get("exp");
             if (exp == null || exp.longValue() <= Instant.now().getEpochSecond()) throw new IllegalArgumentException();
+            if(!"USER_ACCESS".equals(claims.get("token_type")) || !(claims.get("sub") instanceof String subject) || !subject.matches("[1-9][0-9]{0,18}") || !(claims.get("iat") instanceof Number issued) || issued.longValue()>Instant.now().getEpochSecond()+60) throw new IllegalArgumentException();
             return claims;
         } catch (Exception ex) { throw new IllegalArgumentException("invalid jwt", ex); }
     }

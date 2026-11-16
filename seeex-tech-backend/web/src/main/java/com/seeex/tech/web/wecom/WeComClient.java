@@ -66,6 +66,20 @@ public class WeComClient {
         User response = read(client.get().uri(baseUrl + "/cgi-bin/user/get?access_token={token}&userid={id}", getToken().access_token(), userId), User.class);
         if (response.userid() == null) { throw new BizException(ErrorCode.BUSINESS_ERROR, "企业微信成员详情不可用"); } return response;
     }
+    /** 事务外发送不含凭证的站内通知摘要；仅服务端Outbox调用。 */
+    public void sendApplicationNotice(String userId,String content) {
+        var config=settings.current();
+        if(userId==null || "@all".equalsIgnoreCase(userId) || !userId.matches("[A-Za-z0-9_.@-]{1,64}") || config.agentId().isBlank()) throw new BizException(ErrorCode.VALIDATION_FAILED,"企业微信收件身份或应用AgentId不可用");
+        long agentId;
+        try { agentId=Long.parseLong(config.agentId()); if(agentId<=0)throw new NumberFormatException(); }
+        catch(NumberFormatException ex) { throw new BizException(ErrorCode.VALIDATION_FAILED,"企业微信AgentId须为有效正整数"); }
+        var body=java.util.Map.of("touser",userId,"msgtype","text","agentid",agentId,"text",java.util.Map.of("content",content),"safe",1,"enable_duplicate_check",1,"duplicate_check_interval",1800);
+        var response=read(client.post().uri(baseUrl+"/cgi-bin/message/send?access_token={token}",getToken().access_token()).body(body),MessageResult.class); requireSuccess(response.errcode());
+        if(response.invaliduser()!=null && !response.invaliduser().isBlank()) throw new BizException(ErrorCode.BUSINESS_ERROR,"企业微信收件人不在应用可见范围");
+    }
+    /** 外部消息只解析成功标志和无效收件人，不保存远端原文。 */
+    public record MessageResult(int errcode,String invaliduser) { }
+
     private <T> T read(RestClient.RequestHeadersSpec<?> request, Class<T> type) {
         try { T value = request.retrieve().body(type); if (value == null) { throw new BizException(ErrorCode.BUSINESS_ERROR, "企业微信返回空响应"); } return value; }
         catch (org.springframework.web.client.RestClientException ex) { throw new BizException(ErrorCode.BUSINESS_ERROR, "企业微信请求失败，请检查连接和授权范围"); }

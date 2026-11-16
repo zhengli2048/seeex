@@ -1,6 +1,7 @@
 import { Alert, Button, Card, Drawer, Empty, Message, Modal, Select, Space, Spin, Tag, Tree } from '@arco-design/web-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useDraftGuard } from './DraftGuard'
 import { api, getApiMessage, notifyApiError } from '../lib/api'
 import { loadAll, treeNodes, type TreeRow } from '../lib/management'
 
@@ -24,6 +25,7 @@ export function ResourceGrantDrawer({ endpoint, title, onClose }: Props) {
   const displayed = allRows.filter((row) => !entry || row.entryType === entry)
   const visibleIds = new Set(displayed.map((row) => row.id))
   const save = useMutation({ mutationFn: () => api.put(endpoint, value, { params: { applicationCode: app } }), onSuccess: async () => { Message.success('权限已保存'); await client.invalidateQueries(); onClose() }, onError: (error) => { notifyApiError(error) } })
+  useDraftGuard(draft !== null, save.isPending)
   const failed = resources.error ?? current.error ?? apps.error
   const busy = resources.isLoading || current.isLoading || apps.isLoading
   const blocked = busy || Boolean(failed) || save.isPending

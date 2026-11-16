@@ -5,7 +5,6 @@ import com.seeex.tech.common.api.ErrorCode;
 import com.seeex.tech.common.exception.BizException;
 import com.seeex.tech.web.auth.AccountService;
 import com.seeex.tech.web.auth.TokenSessionService;
-import com.seeex.tech.web.auth.entity.EmployeeAccountDO;
 import org.springframework.web.bind.annotation.*;
 
 /** 认证接口。 */
@@ -24,11 +23,11 @@ public class AuthController {
     @com.seeex.tech.web.audit.AuditLog(action = "LOGIN", resourceType = "AUTH")
     public ApiResponse<TokenSessionService.TokenPair> login(@RequestBody LoginRequest request) {
         if (request.phone() == null || request.phone().isBlank() || request.phone().length() > 64 || request.password() == null || request.password().isBlank() || request.password().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) { throw new BizException(ErrorCode.VALIDATION_FAILED, "请填写有效的账号和密码"); }
-        if (!accountService.verify(request.phone(), request.password())) {
+        var verified=accountService.verifiedAccount(request.phone(),request.password());
+        if (verified==null) {
             throw new BizException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
         }
-        EmployeeAccountDO account = accountService.findByPhone(request.phone());
-        return ApiResponse.ok(sessions.issue(String.valueOf(account.getEmployeeId()), "web-console"));
+        return ApiResponse.ok(sessions.issueLocal(verified));
     }
 
     @PostMapping("/refresh") public ApiResponse<TokenSessionService.TokenPair> refresh(@RequestBody RefreshRequest request) { return ApiResponse.ok(sessions.rotate(request.refreshToken())); }

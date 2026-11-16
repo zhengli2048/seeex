@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RbacManagementService {
 
+    @org.springframework.beans.factory.annotation.Autowired private com.seeex.tech.web.auth.ManagementAuthorizationService authorization;
     private static final String ACTIVE = "ACTIVE";
     private static final String MANUAL = "MANUAL";
 
@@ -102,6 +103,8 @@ public class RbacManagementService {
     @Transactional
     public RoleItem updateRole(long id, RoleCommand command) {
         RoleDO entity = require(roleMapper.selectById(id), "role");
+        var actor=org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if(actor!=null && command.status()!=null && !command.status().equals(entity.getStatus())) authorization.require(actor,"rbac:roles:grant");
         if (command.name() != null) {
             requireText(command.name(), "name");
             entity.setName(command.name());

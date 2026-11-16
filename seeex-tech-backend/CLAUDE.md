@@ -318,3 +318,15 @@ Cross-application navigation uses a short-lived one-time exchange code. The auth
 - 企微HTTP读取在事务外，独立Bean以REQUIRES_NEW原子写部门树/单员工；批次租约和执行令牌在每次写入事务内校验，结果与员工写入同事务提交，失败另记。
 - 应用策略使用rowVersion CAS；管理员集合和角色数据范围以独立配置版本CAS串行修改，前端必须传expectedVersion，409保留草稿并提供重载。
 - 审计名称及组织/角色统计批量读取；大型员工/角色字典按关键字限制返回并保留已选项。继续禁止运行项目、测试、构建和迁移。
+
+### 新应用申请审批实施契约
+- 首期使用平台自有受限顺序审批器及Arco节点/属性配置；不引入未经运行验证的Flowable/BPMN依赖，不提供任意BPMN、脚本、表达式或HTTP节点。支持固定/角色/部门负责人候选、ALL/ANY、受控条件和兜底；办理与定向交付不可从模型中删除。
+- 所有状态变更以版本CAS和服务事务保护；申请人、任务资格、办理候选与交付收件人均由会话及服务端记录判定。直接注册改为platform:apps:override加理由。
+- 交付使用独立APP_DELIVERY_KEY（Base64编码32字节）和APP_DELIVERY_KEY_ID加密；只有原申请人POST领取一次，过期返回DELIVERY_EXPIRED（CONFLICT/409）；审计、通知和普通响应禁止包含密钥。
+- 新迁移V25及后续只编写不执行；继续禁止构建、类型检查、测试执行、启动及真实企微/OSS调用。
+
+### 2026-11-17 全平台复查补充
+- V25首次交付前普通应用编辑和CI/服务凭证轮换拒绝，受控补发仍交原申请人，确认收件与解除门禁同事务。注册后编码所有权保留，提交对环境绑定加锁。所有新接入路径保留安全审批。
+- V26独立employees:accounts；角色启停额外要求rbac:roles:grant。V27账号authVersion及会话accountId/accountVersion约束重置并发签发/刷新，旧本地会话升级需重新登录。
+- AUTH_JWT_SECRET与FILE_SERVICE_TOKEN取消开发默认值；管理员引导默认关闭，显式引导密码至少12字符且UTF-8不超过72字节。生产持久会话不积累明文刷新令牌内存表。
+- Spring Boot4使用显式spring-boot-jackson2/JavaTime与jackson2 MVC偏好保留现有JSON契约；源码AST及组件声明核对不等于编译、类型检查、运行或迁移通过。当前限制仍是不运行。

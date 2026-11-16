@@ -25,8 +25,10 @@ public class ApplicationRegistryController {
     /** 注册应用并仅返回一次 CI 及应用服务凭证。 */
     @PostMapping("/platform/apps")
     @AuditLog(action = "REGISTER_APPLICATION", resourceType = "APPLICATION")
-    public ApiResponse<ApplicationRegistryService.AppRegistration> register(@RequestBody ApplicationRegistryService.RegisterAppCommand command, Authentication auth) {
-        authorization.require(auth, "platform:apps:create"); return ApiResponse.ok(registry.register(command));
+    public ApiResponse<ApplicationRegistryService.AppRegistration> register(@RequestBody ApplicationRegistryService.RegisterAppCommand command, @RequestParam String reason, Authentication auth) {
+        authorization.require(auth, "platform:apps:override");
+        if(reason.isBlank() || reason.length()>1000) throw new BizException(ErrorCode.VALIDATION_FAILED,"紧急直建必须填写原因（最多1000字）");
+        return ApiResponse.ok(registry.register(command));
     }
     /** 查询管理列表。 */
     @GetMapping("/platform/apps")
@@ -118,7 +120,7 @@ public class ApplicationRegistryController {
             var release = app.release();
             var routes = visible.stream().filter(menu -> menu.appCode().equals(app.appCode())).map(ApplicationRegistryService.MenuView::route).toList();
             var filtered = new ApplicationRegistryService.MetadataRelease(release.id(), release.appCode(), release.version(), release.gitCommit(), release.environment(), release.baseUrl(), routes, release.published(), release.reportedAt(), release.approvalStatus(), release.rolloutPercent());
-            return new ApplicationRegistryService.AppView(app.appCode(), app.name(), app.baseUrl(), null, filtered, app.description(), app.type(), app.logo(), null, app.status(), null, null, app.ssoCallbackPath());
+            return new ApplicationRegistryService.AppView(app.appCode(), app.name(), app.baseUrl(), null, filtered, app.description(), app.type(), app.logo(), null, app.status(), null, null, app.ssoCallbackPath(),app.initialDeliveryPending());
         }).toList());
     }
     /** 为真实用户生成授权跳转地址。 */

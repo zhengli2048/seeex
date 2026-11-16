@@ -1,4 +1,5 @@
 import { Alert, Drawer, Form, Input, InputNumber, Modal, Select, Switch, TreeSelect } from '@arco-design/web-react'
+import { useDraftGuard } from './DraftGuard'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { FormItemProps, SelectProps, TreeSelectProps } from '@arco-design/web-react'
@@ -39,6 +40,7 @@ export function EntityDrawer(props: EntityDrawerProps) {
   const [form] = Form.useForm()
   const [dirty, setDirty] = useState(false)
   const readOnly = mode === 'view'
+  useDraftGuard(Boolean(visible && dirty && !readOnly), Boolean(visible && loading))
 
   useEffect(() => {
     if (visible) {

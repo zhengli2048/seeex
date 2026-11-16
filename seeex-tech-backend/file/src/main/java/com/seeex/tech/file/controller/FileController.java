@@ -123,6 +123,10 @@ public class FileController {
         return ApiResponse.ok(metadata.list(owner, tenant, Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100), keyword, status, contentType));
     }
 
+    /** 仅服务令牌调用，检查申请附件原所有者与确认状态。 */
+    @GetMapping("/onboarding-reference")
+    public ApiResponse<FileMetadataService.AttachmentReference> attachment(@RequestParam String objectKey,@RequestHeader("X-User-Id") String owner,@RequestHeader("X-Tenant-Id") String tenant) { return ApiResponse.ok(metadata.attachment(objectKey,owner,tenant)); }
+
     /**
      * 申请下载 URL。
      *

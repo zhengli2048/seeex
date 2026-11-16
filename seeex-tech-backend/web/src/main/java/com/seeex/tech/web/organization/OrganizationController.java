@@ -192,12 +192,12 @@ public class OrganizationController {
     /** 查看员工登录账号状态。 */
     @GetMapping("/employees/{id}/account")
     public ApiResponse<com.seeex.tech.web.auth.AccountService.AccountView> account(@PathVariable long id, Authentication authentication) {
-        authorization.require(authentication, "employees:update"); authorization.requireEmployeeScope(authentication,id); return ApiResponse.ok(accounts.account(id));
+        authorization.require(authentication, "employees:accounts"); authorization.requireEmployeeScope(authentication,id); return ApiResponse.ok(accounts.account(id));
     }
     /** 创建或重置员工登录账号。 */
     @PutMapping("/employees/{id}/account")
     @com.seeex.tech.web.audit.AuditLog(action = "UPDATE_ACCOUNT", resourceType = "AUTH")
     public ApiResponse<com.seeex.tech.web.auth.AccountService.AccountView> saveAccount(@PathVariable long id, @RequestBody com.seeex.tech.web.auth.AccountService.AccountCommand command, Authentication authentication) {
-        authorization.require(authentication, "employees:update"); authorization.requireEmployeeScope(authentication,id); return ApiResponse.ok(accounts.save(id, command));
+        authorization.require(authentication, "employees:accounts"); authorization.requireEmployeeScope(authentication,id); return ApiResponse.ok(accounts.save(id, command));
     }
 }

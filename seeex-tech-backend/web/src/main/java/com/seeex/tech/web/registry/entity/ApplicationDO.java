@@ -108,4 +108,16 @@ public class ApplicationDO {
     public String getClientSecretHash() { return clientSecretHash; }
     /** 设置应用服务凭证摘要。 */
     public void setClientSecretHash(String value) { clientSecretHash = value; }
+    @com.baomidou.mybatisplus.annotation.TableField(updateStrategy=com.baomidou.mybatisplus.annotation.FieldStrategy.NEVER)
+    private Long originatingRequestId;
+    /** 读取首次注册的申请关联。 */
+    public Long getOriginatingRequestId() { return originatingRequestId; }
+    /** 设置唯一来源申请，防止重复办理。 */
+    public void setOriginatingRequestId(Long value) { originatingRequestId=value; }
+    @com.baomidou.mybatisplus.annotation.TableField(updateStrategy=com.baomidou.mybatisplus.annotation.FieldStrategy.NEVER)
+    private Boolean initialDeliveryPending;
+    /** 首次交付确认前禁止普通元数据修改与旧凭证轮换入口。 */
+    public Boolean getInitialDeliveryPending() { return initialDeliveryPending; }
+    /** 首次注册时设置交付门禁。 */
+    public void setInitialDeliveryPending(Boolean value) { initialDeliveryPending=value; }
 }

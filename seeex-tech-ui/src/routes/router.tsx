@@ -1,3 +1,8 @@
+import { RequestsPage } from '../features/onboarding/RequestsPage'
+import { TasksPage } from '../features/onboarding/TasksPage'
+import { WorkflowsPage } from '../features/onboarding/WorkflowsPage'
+import { InboxPage, NotificationJobsPage } from '../features/onboarding/InboxPage'
+import { DraftGuardProvider } from '../components/DraftGuard'
 import { Navigate, createBrowserRouter } from 'react-router-dom'
 import { AdminLayout } from '../layouts/AdminLayout'
 import { LoginPage } from '../features/auth/LoginPage'
@@ -14,11 +19,18 @@ import { isAuthenticated } from '../lib/auth'
 import { PermissionAnalysisPage } from '../features/permissions/PermissionAnalysisPage'
 import { PageErrorBoundary } from '../components/PageErrorBoundary'
 // eslint-disable-next-line react-refresh/only-export-components
-function Protected() { return isAuthenticated() ? <AdminLayout /> : <Navigate to="/login" replace /> }
+function Protected() { return isAuthenticated() ? <DraftGuardProvider><AdminLayout /></DraftGuardProvider> : <Navigate to="/login" replace /> }
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage />, errorElement: <PageErrorBoundary /> },
   { path: '/', element: <Protected />, errorElement: <PageErrorBoundary />, children: [
     { index: true, element: <DashboardPage /> },
+    { path: 'application-requests', element: <RequestsPage /> },
+    { path: 'application-requests/manage', element: <RequestsPage scope="MANAGE" /> },
+    { path: 'application-fulfillments', element: <RequestsPage scope="FULFILL" /> },
+    { path: 'approval-tasks', element: <TasksPage /> },
+    { path: 'workflow-definitions', element: <WorkflowsPage /> },
+    { path: 'inbox', element: <InboxPage /> },
+    { path: 'notification-jobs', element: <NotificationJobsPage /> },
     { path: 'applications', element: <ApplicationsPage /> },
     { path: 'employees', element: <EmployeesPage /> },
     { path: 'departments', element: <DepartmentsPage /> },

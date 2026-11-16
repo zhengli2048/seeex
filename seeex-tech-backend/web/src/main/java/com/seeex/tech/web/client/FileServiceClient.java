@@ -56,6 +56,15 @@ public class FileServiceClient {
                 .body(new ParameterizedTypeReference<Map<String, Object>>() { }));
     }
 
+    /** 申请附件只检查平台应用和服务端给定的原所有者，不信任浏览器身份字段。 */
+    public Map<String,Object> onboardingReference(String objectKey,String owner) {
+        return call(()->client.get().uri(uri->uri.path("/api/files/onboarding-reference").queryParam("objectKey",objectKey).build()).headers(headers->{serviceHeaders(headers,owner,"default");headers.set("X-App-Code","platform");}).retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() { }));
+    }
+    /** 按已验证申请附件归属生成受控下载地址。 */
+    public Map<String,Object> onboardingDownload(String objectKey,String owner) {
+        return call(()->client.get().uri(uri->uri.path("/api/files/download-url").queryParam("objectKey",objectKey).build()).headers(headers->{serviceHeaders(headers,owner,"default");headers.set("X-App-Code","platform");}).retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() { }));
+    }
+
     /** 代理批量删除请求。 */
     public Map<String, Object> delete(List<String> objectKeys, String owner, String tenant) {
         return call(() -> client.method(HttpMethod.DELETE).uri("/api/files/batch").headers(headers -> serviceHeaders(headers, owner, tenant))
@@ -63,6 +72,7 @@ public class FileServiceClient {
     }
 
     private Map<String, Object> call(java.util.function.Supplier<Map<String, Object>> action) {
+        if(token==null || token.getBytes(java.nio.charset.StandardCharsets.UTF_8).length<32 || "dev-only-token".equals(token))throw new com.seeex.tech.common.exception.BizException(com.seeex.tech.common.api.ErrorCode.BUSINESS_ERROR,"文件服务身份凭证未配置或强度不足，请联系管理员");
         try { return action.get(); }
         catch (org.springframework.web.client.RestClientResponseException ex) {
             try {

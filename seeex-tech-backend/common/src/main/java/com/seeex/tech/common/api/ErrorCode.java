@@ -18,6 +18,8 @@ public enum ErrorCode {
     RESOURCE_NOT_FOUND("RESOURCE_NOT_FOUND", ErrorType.NOT_FOUND, "资源不存在"),
     /** 请求与当前资源状态冲突。 */
     CONFLICT("CONFLICT", ErrorType.CONFLICT, "请求与当前资源状态冲突"),
+    /** 定向交付已超过领取有效期。 */
+    DELIVERY_EXPIRED("DELIVERY_EXPIRED", ErrorType.CONFLICT, "交付已过期，请申请补发"),
     /** 触发限流。 */
     RATE_LIMITED("RATE_LIMITED", ErrorType.RATE_LIMITED, "请求过于频繁"),
     /** 业务处理失败。 */

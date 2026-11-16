@@ -20,7 +20,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -87,13 +86,14 @@ public class PermissionService {
         });
 
         Set<String> activeApps = applicationMapper.selectList(com.baomidou.mybatisplus.core.toolkit.Wrappers.<com.seeex.tech.web.registry.entity.ApplicationDO>lambdaQuery().eq(com.seeex.tech.web.registry.entity.ApplicationDO::getStatus,"ACTIVE")).stream().map(com.seeex.tech.web.registry.entity.ApplicationDO::getAppCode).collect(Collectors.toSet());
-        for (var policy : policyMapper.selectList(com.baomidou.mybatisplus.core.toolkit.Wrappers.<com.seeex.tech.web.governance.ApplicationPolicyDO>lambdaQuery().eq(com.seeex.tech.web.governance.ApplicationPolicyDO::getStatus,"ACTIVE"))) {
-            if (!activeApps.contains(policy.getApplicationCode()) || !("EMPLOYEE".equals(policy.getSubjectType()) && Long.valueOf(employeeId).equals(policy.getSubjectId()) || "ROLE".equals(policy.getSubjectType()) && roleIds.contains(policy.getSubjectId()))) { continue; }
-            var resource = resourceMapper.selectById(policy.getResourceId());
-            if (resource == null || resource.getDeletedAt() != null || !"ACTIVE".equals(resource.getStatus()) || !policy.getApplicationCode().equals(resource.getApplicationCode())) { continue; }
-            String code = resource.getPermissionCode();
-            if ("DENY".equals(policy.getEffect())) { deny.add(code); } else { allow.add(code); }
-            sources.computeIfAbsent(code, ignored -> new HashSet<>()).add("应用策略：" + policy.getName());
+        var matchedPolicies=policyMapper.selectList(com.baomidou.mybatisplus.core.toolkit.Wrappers.<com.seeex.tech.web.governance.ApplicationPolicyDO>lambdaQuery().eq(com.seeex.tech.web.governance.ApplicationPolicyDO::getStatus,"ACTIVE").and(query->{query.and(person->person.eq(com.seeex.tech.web.governance.ApplicationPolicyDO::getSubjectType,"EMPLOYEE").eq(com.seeex.tech.web.governance.ApplicationPolicyDO::getSubjectId,employeeId));if(!roleIds.isEmpty())query.or(role->role.eq(com.seeex.tech.web.governance.ApplicationPolicyDO::getSubjectType,"ROLE").in(com.seeex.tech.web.governance.ApplicationPolicyDO::getSubjectId,roleIds));}));
+        var policyResources=new HashMap<Long,ResourceDO>(); var policyResourceIds=matchedPolicies.stream().map(com.seeex.tech.web.governance.ApplicationPolicyDO::getResourceId).collect(Collectors.toSet());
+        if(!policyResourceIds.isEmpty())resourceMapper.selectList(new LambdaQueryWrapper<ResourceDO>().in(ResourceDO::getId,policyResourceIds).eq(ResourceDO::getStatus,"ACTIVE").isNull(ResourceDO::getDeletedAt)).forEach(resource->policyResources.put(resource.getId(),resource));
+        for(var policy:matchedPolicies) {
+            if(!activeApps.contains(policy.getApplicationCode()))continue;
+            var resource=policyResources.get(policy.getResourceId()); if(resource==null || !policy.getApplicationCode().equals(resource.getApplicationCode()))continue;
+            String code=resource.getPermissionCode(); if("DENY".equals(policy.getEffect()))deny.add(code);else if("ALLOW".equals(policy.getEffect()))allow.add(code);
+            sources.computeIfAbsent(code,ignored->new HashSet<>()).add("应用策略："+policy.getName());
         }
 
         Set<String> effective = new HashSet<>(allow);

@@ -22,4 +22,9 @@ public class EmployeeAccountDO {
     public void setPasswordHash(String v) { passwordHash = v; }
     public String getStatus() { return status; }
     public void setStatus(String v) { status = v; }
+    private Long authVersion;
+    /** 凭证版本，密码/账号/状态变化时单调增加。 */
+    public Long getAuthVersion() { return authVersion; }
+    /** 设置凭证版本。 */
+    public void setAuthVersion(Long value) { authVersion=value; }
 }

@@ -1,6 +1,6 @@
 import {Button, Form, Input, Divider} from '@arco-design/web-react'
 import {useEffect, useRef, useState} from 'react'
-import {useQuery} from '@tanstack/react-query'
+import {useQuery, useQueryClient} from '@tanstack/react-query'
 import {useSearchParams} from 'react-router-dom'
 import {useNavigate} from 'react-router-dom'
 import {api, notifyApiError} from '../../lib/api'
@@ -9,6 +9,7 @@ import {saveTokens, saveUserContext} from '../../lib/auth'
 export function LoginPage() {
     const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
+    const client = useQueryClient()
     const [params] = useSearchParams()
     const consumed = useRef(false)
     const wecom = useQuery({ queryKey: ['wecom-login-status'], queryFn: async () => (await api.get<{ data: { enabled: boolean } }>('/auth/wecom/status')).data.data, retry: false })
@@ -19,9 +20,9 @@ export function LoginPage() {
         setLoading(true)
         void api.get<{ data: { accessToken: string; refreshToken: string } }>('/auth/wecom/callback', { params: { code, state } }).then(async (response) => {
             saveTokens(response.data.data.accessToken, response.data.data.refreshToken)
-            const me = await api.get('/me'); saveUserContext(me.data.data.employeeId, me.data.data.tenantId); navigate('/', { replace: true })
+            const me = await api.get('/me'); saveUserContext(me.data.data.employeeId, me.data.data.tenantId); client.clear(); navigate('/', { replace: true })
         }).catch((error) => notifyApiError(error)).finally(() => setLoading(false))
-    }, [params, navigate])
+    }, [params, navigate, client])
 
     async function onSubmit(values: { phone: string; password: string }) {
         setLoading(true)
@@ -30,6 +31,7 @@ export function LoginPage() {
             saveTokens(data.data.accessToken, data.data.refreshToken)
             const me = await api.get('/me')
             saveUserContext(me.data.data.employeeId, me.data.data.tenantId)
+            client.clear()
             navigate('/')
         } catch (error) {
             notifyApiError(error, '登录失败，请检查账号和密码')

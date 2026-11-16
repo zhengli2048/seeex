@@ -6,8 +6,10 @@
 - `seeex-tech-ui/`：React / TypeScript / Arco Design（字节），管理控制台。
 - `docs/`：按钮级页面清单、接口契约、方案、实施记录与静态审查。
 
-当前状态与限制见 [平台审查](docs/design/13-platform-status-and-code-review.md) 和 [缺陷修复记录](docs/design/14-platform-defect-remediation.md)；页面清单见 [实施清单](docs/plans/seeex-console-implementation-checklist.md)。审批流、新应用申请、办理和定向交付尚处方案阶段，不能视为已上线功能。
+当前状态与限制见 [平台审查](docs/design/13-platform-status-and-code-review.md) 和 [缺陷修复记录](docs/design/14-platform-defect-remediation.md)；页面清单见 [实施清单](docs/plans/seeex-console-implementation-checklist.md)。新应用申请、受限流程配置、审批、办理与定向交付已补充源码，尚未运行验收；当前实现及按钮/API见 [申请审批契约](docs/plans/seeex-onboarding-button-contract.md)，全平台状态及保留缺口见 [静态复查](docs/design/16-whole-platform-static-audit.md)。
 
 本轮遵照用户要求仅修改源码并静态检查，没有编译、类型检查、运行测试、服务启动、数据库迁移或真实接口调用。V24发布前需停旧同步消费者，前后端同批发布，迁移步骤见修复记录。配置通过环境变量注入，不提交本地环境、密钥、IDE文件或构建产物。
 
 后端工程约束见 `seeex-tech-backend/AGENTS.md`（与 `CLAUDE.md` 同步）；其中常规运行检查在本轮受用户“不运行”要求覆盖，未声称通过。
+
+本轮新增V25–V27（未执行），首次交付使用独立APP_DELIVERY_KEY；JWT和文件服务凭证需显式配置，固定管理员密码默认创建已关闭。V27发布会要求旧本地会话重新登录。发布前提及环境字段见申请审批契约。

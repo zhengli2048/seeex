@@ -8,5 +8,5 @@ import org.springframework.context.annotation.Bean;
 public class WebApplication {
     public static void main(String[] args) { SpringApplication.run(WebApplication.class, args); }
     @Bean
-    public ObjectMapper objectMapper() { return new ObjectMapper().findAndRegisterModules(); }
+    public ObjectMapper objectMapper() { return new ObjectMapper().findAndRegisterModules().disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).disable(com.fasterxml.jackson.databind.DeserializationFeature.ACCEPT_FLOAT_AS_INT); }
 }

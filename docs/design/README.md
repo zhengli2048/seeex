@@ -56,3 +56,9 @@ RBAC 权限服务
 - [实施与验收计划](../plans/seeex-application-approval-implementation.md)：后续步骤和权限资源。
 
 以上属于新增设计，尚未实现；早期“当前尚未实现的代码”列表是历史规划记录，现有平台完成度以 [静态审计及后续更新](./11-auth-platform-completion-audit.md) 为准。
+
+
+## 2026-11-17 实现更新
+
+- [申请审批、办理与定向交付按钮/API契约](../plans/seeex-onboarding-button-contract.md)：已编写受限流程实现，运行未验收。
+- [全平台静态复查与保留缺口](16-whole-platform-static-audit.md)：认证、组织、RBAC、应用、文件、企微、审计和交互的当前状态。

@@ -1,7 +1,9 @@
 import { Alert, Avatar, Button, Card, Descriptions, Drawer, Empty, Grid, Input, InputNumber, Message, Modal, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, TreeSelect } from '@arco-design/web-react'
 import { IconPlus, IconRefresh } from '@arco-design/web-react/icon'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useDraftGuard } from '../../components/DraftGuard'
+import { useNavigate } from 'react-router-dom'
 import { api, getApiMessage, notifyApiError } from '../../lib/api'
 import { loadAll, openApplication, usePermissions } from '../../lib/management'
 import { EntityDrawer, type FieldSpec } from '../../components/EntityDrawer'
@@ -10,7 +12,7 @@ import { ApplicationGovernance } from './ApplicationGovernance'
 
 interface Route { routeCode: string; name: string; path: string; permissionCode: string; icon: string; openType: string; visible: boolean; sortOrder: number; entry: 'WEB' | 'ADMIN'; category: string; parentRouteCode?: string | null }
 interface Release { id: string; version: string; environment: string; published: boolean; approvalStatus: string; rolloutPercent: number; routes: Route[] }
-interface App extends Record<string, unknown> { appCode: string; name: string; description?: string; type: string; logo?: string; status: string; ownerEmployeeId?: number; baseUrl: string; adminUrl?: string; apiUrl?: string; repositoryUrl?: string; ssoCallbackPath: string; release?: Release }
+interface App extends Record<string, unknown> { initialDeliveryPending?: boolean; appCode: string; name: string; description?: string; type: string; logo?: string; status: string; ownerEmployeeId?: number; baseUrl: string; adminUrl?: string; apiUrl?: string; repositoryUrl?: string; ssoCallbackPath: string; release?: Release }
 interface RouteNode { key: string; title: string; children: RouteNode[] }
 interface Credentials { ciToken?: string; clientSecret?: string }
 const blankRoute = (): Route => ({ routeCode: '', name: '', path: '/', permissionCode: '', icon: '', openType: 'NEW_TAB', visible: true, sortOrder: 0, entry: 'WEB', category: '常用功能', parentRouteCode: null })
@@ -81,6 +83,7 @@ function validateRoutes(version: string, routes: Route[], app: App | null): stri
 
 export function ApplicationsPage() {
   const permissions = usePermissions()
+  const navigate = useNavigate()
   const client = useQueryClient()
   const managed = useQuery({ queryKey: ['managed-applications'], queryFn: async () => (await api.get<{ data: string[] }>('/me/application-management')).data.data })
   const isAppAdmin = (code?: string) => Boolean(code && managed.data?.includes(code))
@@ -90,6 +93,12 @@ export function ApplicationsPage() {
   const [editing, setEditing] = useState<Partial<App> | null>(null)
   const [detail, setDetail] = useState<App | null>(null)
   const [credentials, setCredentials] = useState<Credentials | null>(null)
+  const credentialIdentity = () => JSON.stringify(['seeex.employee_id', 'seeex.tenant_id'].map((key) => localStorage.getItem(key)))
+  function acceptCredentials(value: Credentials, identity: string) {
+    if (document.hidden || credentialIdentity() !== identity) {
+      Message.warning('凭证响应到达时页面已隐藏或身份已变化，明文已清除；未保存时请重新轮换。')
+    } else setCredentials(value)
+  }
   const [importing, setImporting] = useState(false)
   const [version, setVersion] = useState('')
   const [gitCommit, setGitCommit] = useState('')
@@ -107,16 +116,19 @@ export function ApplicationsPage() {
   }
   const save = useMutation({
     mutationFn: async (values: Record<string, unknown>) => {
+      const identity = credentialIdentity()
       if (editing?.appCode) await api.put(`/platform/apps/${editing.appCode}`, values)
-      else { const r = await api.post<{ data: Credentials }>('/platform/apps', values); setCredentials(r.data.data) }
+      else { const r = await api.post<{ data: Credentials }>('/platform/apps', values, { params: { reason: values.overrideReason } }); acceptCredentials(r.data.data, identity) }
     },
     onSuccess: async () => { setEditing(null); Message.success('应用已保存'); await refresh() },
     onError: (error) => notifyApiError(error),
   })
-  const operation = useMutation({ mutationFn: ({ path, body }: { path: string; body?: unknown }) => api.post(`/platform/apps/${detail?.appCode}/${path}`, body),
-    onSuccess: async (response) => { const result = (response.data as { data?: Credentials }).data; if (result?.ciToken || result?.clientSecret) setCredentials(result); setRollouts({}); Message.success('操作已保存'); await refresh() }, onError: (error) => notifyApiError(error) })
+  const operation = useMutation({ mutationFn: async ({ path, body }: { path: string; body?: unknown }) => { const identity=credentialIdentity(); const response=await api.post(`/platform/apps/${detail?.appCode}/${path}`,body); const result=(response.data as {data?:Credentials}).data; if(result?.ciToken || result?.clientSecret)acceptCredentials(result,identity) },
+    onSuccess: async () => { setRollouts({}); Message.success('操作已保存'); await refresh() }, onError: (error) => notifyApiError(error) })
   const importRoutes = useMutation({ mutationFn: () => api.post(`/platform/apps/${detail?.appCode}/route-metadata/manual`, { version, gitCommit: gitCommit || null, environment, baseUrl: detail?.baseUrl, routes: routes.map((route) => ({ ...route, permissionCode: route.permissionCode.trim(), category: route.category.trim() })) }),
     onSuccess: async () => { setImporting(false); Message.success('版本已导入，请审核后发布'); await refresh() }, onError: (error) => notifyApiError(error) })
+  useDraftGuard(credentials!==null,operation.isPending || save.isPending || importRoutes.isPending)
+  useEffect(()=>{if(!credentials)return;const clear=()=>setCredentials(null);const hidden=()=>{if(document.hidden)clear()};const changed=(event:StorageEvent)=>{if(event.key==='seeex.employee_id' || event.key==='seeex.tenant_id' || event.key==='seeex.access_token' && !event.newValue)clear()};const timer=setTimeout(clear,180000);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',clear);window.addEventListener('storage',changed);return()=>{clearTimeout(timer);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',clear);window.removeEventListener('storage',changed)}},[credentials])
   const ownerOptions = (owners.data ?? []).map((row) => ({ label: row.displayName, value: row.id }))
   if (editing?.ownerEmployeeId && !ownerOptions.some((option) => option.value === editing.ownerEmployeeId)) ownerOptions.push({ label: `当前负责人 #${editing.ownerEmployeeId}`, value: editing.ownerEmployeeId })
   const fields: FieldSpec[] = [
@@ -131,6 +143,7 @@ export function ApplicationsPage() {
     { name: 'ownerEmployeeId', label: '负责人', type: 'select', readOnly: !permissions.can('employees:view'), options: ownerOptions },
     { name: 'status', label: '状态', type: 'select', required: true, options: [{ label: '启用', value: 'ACTIVE' }, { label: '停用', value: 'INACTIVE' }] },
   ]
+  if (editing !== null && !editing.appCode) fields.push({ name: 'overrideReason', label: '紧急直建原因（将审计）', type: 'textarea', required: true, rules: [{ maxLength: 1000, message: '原因最多1000字' }] })
   function confirm(path: string, title: string, body?: unknown) { Modal.confirm({ title, content: '确认后立即生效。', onOk: () => operation.mutateAsync({ path, body }) }) }
   function changeRoute(index: number, changes: Partial<Route>) { setRouteError(undefined); setRoutes((previous) => previous.map((route, i) => i === index ? { ...route, ...changes } : route)) }
   if (permissions.isLoading) return <Spin />
@@ -143,13 +156,13 @@ export function ApplicationsPage() {
   const routeBusy = importRoutes.isPending
   return <div>
     <div className="page-heading"><div><h1>应用中心</h1><p className="muted">统一接入业务应用，分别管理 Web、后台菜单及服务端授权。</p></div><Space>
-      <Button icon={<IconRefresh />} onClick={() => void refresh()}>刷新</Button>{permissions.can('platform:apps:create') && <Button type="primary" icon={<IconPlus />} onClick={() => { save.reset(); setEditing({ type: 'WEB', status: 'ACTIVE', ssoCallbackPath: '/sso/callback' }) }}>新增应用</Button>}
+      <Button icon={<IconRefresh />} onClick={() => void refresh()}>刷新</Button>{permissions.can('app-requests:create') && <Button type="primary" icon={<IconPlus />} onClick={() => navigate('/application-requests?new=1')}>申请接入新应用</Button>}{permissions.can('platform:apps:override') && <Button status="warning" onClick={() => { save.reset(); setEditing({ type: 'WEB', status: 'ACTIVE', ssoCallbackPath: '/sso/callback' }) }}>紧急直建</Button>}
     </Space></div>
     <Card className="section-card"><Space wrap><Input.Search allowClear placeholder="搜索应用名称或编码" value={keyword} onChange={setKeyword} /><Select allowClear placeholder="应用状态" style={{ width: 150 }} value={status} onChange={setStatus} options={[{ label: '启用', value: 'ACTIVE' }, { label: '停用', value: 'INACTIVE' }]} /><Button onClick={() => void apps.refetch()}>查询</Button><Button onClick={() => { setKeyword(''); setStatus(undefined) }}>重置</Button></Space></Card>
     {apps.isLoading ? <Spin /> : apps.isError ? <Alert type="error" content={getApiMessage(apps.error)} action={<Button onClick={() => void apps.refetch()}>重试</Button>} /> : rows.length === 0 ? <Card className="section-card"><Empty description="暂无符合条件的应用" /></Card> : <Grid.Row gutter={[16, 16]} className="section-card">{rows.map((app) => <Grid.Col key={app.appCode} xs={24} md={12} xl={8}>
       <Card className="application-card" title={<Space><Avatar>{app.logo ? <img src={app.logo} alt="" /> : app.name.slice(0, 1)}</Avatar><span>{app.name}</span></Space>} extra={<Tag color={app.status === 'ACTIVE' ? 'green' : 'gray'}>{app.status === 'ACTIVE' ? '启用' : '停用'}</Tag>}>
         <p className="muted">{app.description || '暂无描述'}</p><p className="application-url">{app.baseUrl}</p><Space wrap><Tag>Web</Tag>{app.adminUrl && <Tag color="purple">管理后台</Tag>}<Tag>{app.release?.version ?? '未发布'}</Tag></Space>
-        <Space className="section-card" wrap><Button onClick={() => { setRollouts({}); setDetail(app) }}>详情与接入</Button>{canManageApp(app.appCode) && <Button onClick={() => { save.reset(); setEditing(app) }}>编辑</Button>}</Space>
+        <Space className="section-card" wrap><Button onClick={() => { setRollouts({}); setDetail(app) }}>详情与接入</Button>{canManageApp(app.appCode) && <Button disabled={app.initialDeliveryPending} onClick={() => { save.reset(); setEditing(app) }}>编辑</Button>}</Space>
       </Card>
     </Grid.Col>)}</Grid.Row>}
     {editing && ownerError && <Alert type="error" content={`负责人选项加载失败：${ownerError}`} action={<Button onClick={() => void owners.refetch()}>重试</Button>} />}
@@ -163,7 +176,7 @@ export function ApplicationsPage() {
         </Tabs.TabPane>
         <Tabs.TabPane key="versions" title="路由与版本">
           {(permissions.can('platform:apps:update') || canManageApp(detail?.appCode)) && <Button type="primary" onClick={() => { importRoutes.reset(); setRoutes([blankRoute()]); setVersion(''); setGitCommit(''); setRouteError(undefined); setImporting(true) }}>添加路由版本</Button>}
-          {versions.isError ? <Alert type="error" content={getApiMessage(versions.error)} action={<Button onClick={() => void versions.refetch()}>重试</Button>} /> : <Table<Release> rowKey="id" loading={versions.isLoading} data={versions.data ?? []} pagination={false} expandedRowRender={(release) => <Tree treeData={routePreview(release.routes)} blockNode defaultExpandAll />} columns={[
+          {versions.isError ? <Alert type="error" content={getApiMessage(versions.error)} action={<Button onClick={() => void versions.refetch()}>重试</Button>} /> : <Table<Release> rowKey="id" loading={versions.isLoading} data={versions.data ?? []} pagination={false} expandedRowRender={(release) => <Tree treeData={routePreview(release.routes)} blockNode defaultExpandedKeys={routePreview(release.routes).map(node=>node.key)} />} columns={[
             { title: '版本', dataIndex: 'version', render: (value, row) => <Space>{value}{detail?.release?.version === row.version && <Tag color="green">当前</Tag>}</Space> }, { title: '环境', dataIndex: 'environment' }, { title: '审核', dataIndex: 'approvalStatus' },
             { title: '灰度', dataIndex: 'rolloutPercent', render: (value, row) => (permissions.can('platform:apps:review') || isAppAdmin(detail?.appCode)) ? <Space><InputNumber aria-label={`${row.version} 灰度比例`} min={0} max={100} precision={0} disabled={operation.isPending} value={rollouts[row.version] ?? value} style={{ width: 80 }} onChange={(percent) => setRollouts((previous) => ({ ...previous, [row.version]: percent ?? 0 }))} /><Button size="mini" disabled={operation.isPending || (rollouts[row.version] ?? value) === value} onClick={() => confirm(`route-metadata/${encodeURIComponent(row.version)}/rollout`, `调整灰度为 ${rollouts[row.version]}%？`, { percent: rollouts[row.version] })}>保存</Button></Space> : `${value}%` },
             { title: '操作', width: 240, render: (_, row) => <Space wrap>{(permissions.can('platform:apps:review') || isAppAdmin(detail?.appCode)) && <><Button type="text" disabled={operation.isPending || row.approvalStatus === 'APPROVED'} onClick={() => confirm(`route-metadata/${encodeURIComponent(row.version)}/review`, '审核通过？', { approved: true })}>通过</Button><Button type="text" status="danger" disabled={detail?.release?.version === row.version || operation.isPending} onClick={() => confirm(`route-metadata/${encodeURIComponent(row.version)}/review`, '拒绝此版本？', { approved: false })}>拒绝</Button></>}{(permissions.can('platform:apps:publish') || isAppAdmin(detail?.appCode)) && <><Button type="text" disabled={row.approvalStatus !== 'APPROVED' || operation.isPending || detail?.release?.version === row.version} onClick={() => confirm(`route-metadata/${encodeURIComponent(row.version)}/publish`, '发布此版本？')}>发布</Button><Button type="text" disabled={!row.published || detail?.release?.version === row.version || operation.isPending} onClick={() => confirm(`route-metadata/${encodeURIComponent(row.version)}/rollback`, '回滚至此版本？')}>回滚</Button></>}</Space> },
@@ -171,7 +184,7 @@ export function ApplicationsPage() {
         </Tabs.TabPane>
         <Tabs.TabPane key="governance" title="管理员与权限策略">{detail && canManageApp(detail.appCode) ? <ApplicationGovernance appCode={detail.appCode} /> : <Alert content="需要本应用管理权限" />}</Tabs.TabPane>
         <Tabs.TabPane key="auth" title="认证与接入">
-          <Alert content="CI Token 仅用于路由上报；应用服务凭证用于 SSO 交换和服务端鉴权。两者分别轮换，明文仅展示一次。" />
+          {detail?.initialDeliveryPending && <Alert type="warning" content="首次交付尚未确认。原申请人需在我的申请中领取并确认；收件前普通修改和轮换已禁用，补发须走平台办理流程。" />}<Alert content="CI Token 仅用于路由上报；应用服务凭证用于 SSO 交换和服务端鉴权。两者分别轮换，明文仅展示一次。" />
           <Descriptions className="section-card" column={1} border data={[
             { label: '路由上报', value: `POST /api/platform/apps/${detail?.appCode}/route-metadata（X-CI-Token）` },
             { label: 'SSO 交换', value: 'POST /api/sso/token/exchange（X-App-Secret；code、appCode、entry）' },
@@ -179,7 +192,7 @@ export function ApplicationsPage() {
             { label: '权限判定', value: 'POST /api/app-auth/check（另含 permissionCode）' },
           ]} />
           <Alert className="section-card" type="warning" content="服务凭证只保存在应用后端。应用需在受保护 API 中执行权限校验，并从自身已验证会话取得 subjectId。SSO 交换码 60 秒有效且仅可使用一次；返回的权限快照不会自动更新应用自身会话。" />
-          <Space className="section-card" wrap>{(permissions.can('platform:apps:ci') || isAppAdmin(detail?.appCode)) && <Button status="danger" loading={operation.isPending} onClick={() => confirm('ci-credentials/rotate', '轮换后旧 CI 凭证立即失效，继续？')}>轮换 CI 凭证</Button>}{(permissions.can('platform:apps:auth') || isAppAdmin(detail?.appCode)) && <Button status="danger" loading={operation.isPending} onClick={() => confirm('service-credentials/rotate', '轮换后旧应用服务凭证立即失效，继续？')}>轮换服务凭证</Button>}</Space>
+          <Space className="section-card" wrap>{(permissions.can('platform:apps:ci') || isAppAdmin(detail?.appCode)) && <Button status="danger" disabled={detail?.initialDeliveryPending} loading={operation.isPending} onClick={() => confirm('ci-credentials/rotate', '轮换后旧 CI 凭证立即失效，继续？')}>轮换 CI 凭证</Button>}{(permissions.can('platform:apps:auth') || isAppAdmin(detail?.appCode)) && <Button status="danger" disabled={detail?.initialDeliveryPending} loading={operation.isPending} onClick={() => confirm('service-credentials/rotate', '轮换后旧应用服务凭证立即失效，继续？')}>轮换服务凭证</Button>}</Space>
         </Tabs.TabPane>
       </Tabs>
     </Drawer>
@@ -205,8 +218,8 @@ export function ApplicationsPage() {
       <Button className="section-card" disabled={routeBusy} icon={<IconPlus />} onClick={() => setRoutes((previous) => [...previous, blankRoute()])}>新增路由</Button>
       <Card className="section-card" title="菜单层级预览"><Tree treeData={routePreview(routes.filter((route) => route.routeCode))} blockNode /></Card>
     </Drawer>
-    <Modal title="接入凭证仅展示一次" visible={credentials !== null} footer={null} maskClosable={false} onCancel={() => setCredentials(null)}>
-      <Alert type="warning" content="关闭后无法再次查看。分别保存到 CI Secret 与应用后端的 Secret 配置。" />
+    <Modal title="接入凭证仅展示一次" visible={credentials !== null} footer={null} maskClosable={false} onCancel={() => Modal.confirm({title:'确认已安全保存？关闭后无法回查。',onOk:()=>setCredentials(null)})}>
+      <Alert type="warning" content="关闭、页面隐藏或3分钟后无法再次查看。分别保存到 CI Secret 与应用后端的 Secret 配置。" />
       {(['ciToken', 'clientSecret'] as const).map((key) => credentials?.[key] ? <div className="section-card" key={key}><strong>{key === 'ciToken' ? 'CI Token（仅路由上报）' : '应用服务凭证（仅后端使用）'}</strong><Input.TextArea value={credentials[key]} readOnly autoSize /><Button onClick={() => void copyCredential(credentials[key]!)}>复制{key === 'ciToken' ? ' CI Token' : '服务凭证'}</Button></div> : null)}
     </Modal>
   </div>

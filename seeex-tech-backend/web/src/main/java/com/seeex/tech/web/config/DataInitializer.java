@@ -10,16 +10,14 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
-/** 启动时初始化默认管理员账号。 */
+/** 仅显式启用首次部署引导时创建管理员，无固定初始密码。 */
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="bootstrap.admin.enabled",havingValue="true")
 @RequiredArgsConstructor
 public class DataInitializer implements CommandLineRunner {
 
-    /** 默认登录手机号。 */
-    private static final String DEFAULT_LOGIN_PHONE = "admin";
-
-    /** 默认初始密码（首次部署后应修改）。 */
-    private static final String DEFAULT_PASSWORD = "Seeex@2026";
+    @org.springframework.beans.factory.annotation.Value("${bootstrap.admin.login:admin}") private String initialLogin;
+    @org.springframework.beans.factory.annotation.Value("${bootstrap.admin.password:}") private String initialPassword;
 
     private final EmployeeMapper employeeMapper;
     private final EmployeeAccountMapper accountMapper;
@@ -27,6 +25,7 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        if(initialPassword==null || initialPassword.length()<12 || initialPassword.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72 || "Seeex@2026".equals(initialPassword) || initialLogin==null || initialLogin.isBlank() || initialLogin.length()>32) throw new com.seeex.tech.common.exception.BizException(com.seeex.tech.common.api.ErrorCode.BUSINESS_ERROR,"初始化管理员必须提供有效账号和12字符以上、UTF-8不超过72字节的独立密码");
         EmployeeDO employee = employeeMapper.selectOne(new LambdaQueryWrapper<EmployeeDO>()
                 .eq(EmployeeDO::getEmployeeNo, "E0001"));
         if (employee == null) {
@@ -37,8 +36,8 @@ public class DataInitializer implements CommandLineRunner {
         if (count == null || count == 0) {
             EmployeeAccountDO account = new EmployeeAccountDO();
             account.setEmployeeId(employee.getId());
-            account.setLoginPhone(DEFAULT_LOGIN_PHONE);
-            account.setPasswordHash(passwordEncoder.encode(DEFAULT_PASSWORD));
+            account.setLoginPhone(initialLogin);
+            account.setPasswordHash(passwordEncoder.encode(initialPassword));
             account.setStatus("ACTIVE");
             accountMapper.insert(account);
         }

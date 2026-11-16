@@ -111,6 +111,15 @@ public class FileMetadataService {
         }
     }
 
+    /** 受信任服务的申请附件引用检查，沿用应用/租户/原所有者私有边界。 */
+    public AttachmentReference attachment(String objectKey,String owner,String tenant) {
+        var row=fileMetadataMapper.selectOne(Wrappers.<FileMetadataDO>lambdaQuery().eq(FileMetadataDO::getObjectKey,objectKey).eq(FileMetadataDO::getOwnerId,owner).eq(FileMetadataDO::getTenantId,tenant).eq(FileMetadataDO::getApplicationCode,application()).eq(FileMetadataDO::getStatus,STATUS_CONFIRMED));
+        if(row==null) throw new BizException(ErrorCode.RESOURCE_NOT_FOUND,"附件不存在、尚未确认或不属于申请人");
+        return new AttachmentReference(row.getObjectKey(),row.getFileName(),row.getFileSize());
+    }
+    /** 最小附件引用信息，不包含下载地址或其他人的文件。 */
+    public record AttachmentReference(String objectKey,String fileName,Long fileSize) { }
+
     /** 分页查询当前租户和所有者可见的文件。 */
     public PageResult list(String ownerId, String tenantId, int page, int pageSize, String keyword, String status, String contentType) {
         LambdaQueryWrapper<FileMetadataDO> wrapper = Wrappers.<FileMetadataDO>lambdaQuery()

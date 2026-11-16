@@ -18,14 +18,17 @@ public class AccountService {
     private final AuthTokenSessionMapper sessions;
 
     /** 校验登录手机号与密码。 */
-    public boolean verify(String phone, String rawPassword) {
-        EmployeeAccountDO account = findByPhone(phone);
-        if (account == null || !"ACTIVE".equals(account.getStatus())) {
-            return false;
-        }
-        var employee = employeeMapper.selectById(account.getEmployeeId());
-        return employee != null && employee.getDeletedAt() == null && "ACTIVE".equals(employee.getStatus())
-                && rawPassword != null && account.getPasswordHash() != null && passwordEncoder.matches(rawPassword, account.getPasswordHash());
+    public boolean verify(String phone, String rawPassword) { return verifiedAccount(phone,rawPassword)!=null; }
+
+    /** 返回本次验证的同一个员工身份，避免验证后重新查账号而切换归属。 */
+    public Long verifiedEmployee(String phone,String rawPassword) { var result=verifiedAccount(phone,rawPassword); return result==null?null:result.employeeId(); }
+    /** 密码校验结果携带同一份凭证版本，不能在签发时换成较新的版本。 */
+    public VerifiedAccount verifiedAccount(String phone,String rawPassword) {
+        EmployeeAccountDO account=findByPhone(phone);
+        if(account==null || !"ACTIVE".equals(account.getStatus()))return null;
+        var employee=employeeMapper.selectById(account.getEmployeeId());
+        boolean valid=employee!=null && employee.getDeletedAt()==null && "ACTIVE".equals(employee.getStatus()) && rawPassword!=null && account.getPasswordHash()!=null && passwordEncoder.matches(rawPassword,account.getPasswordHash());
+        return valid?new VerifiedAccount(account.getId(),account.getEmployeeId(),account.getAuthVersion()==null?0L:account.getAuthVersion()):null;
     }
 
     /** 按登录手机号查询账号。 */
@@ -50,18 +53,25 @@ public class AccountService {
         if (accountMapper.selectCount(new LambdaQueryWrapper<EmployeeAccountDO>().eq(EmployeeAccountDO::getLoginPhone, command.loginPhone()).ne(EmployeeAccountDO::getEmployeeId, employeeId)) > 0) { throw new com.seeex.tech.common.exception.BizException(com.seeex.tech.common.api.ErrorCode.CONFLICT, "登录账号已存在"); }
         var row = accountMapper.selectOne(new LambdaQueryWrapper<EmployeeAccountDO>().eq(EmployeeAccountDO::getEmployeeId, employeeId));
         boolean fresh = row == null;
-        boolean revoke = !fresh && (!java.util.Objects.equals(row.getLoginPhone(), command.loginPhone()) || "DISABLED".equals(command.status()) || command.password() != null && !command.password().isBlank());
+        boolean revoke = !fresh && (!java.util.Objects.equals(row.getLoginPhone(), command.loginPhone()) || !java.util.Objects.equals(row.getStatus(),command.status()) || command.password() != null && !command.password().isBlank());
+        if(!fresh && !revoke)return account(employeeId);
+        long expected=fresh || row.getAuthVersion()==null?0L:row.getAuthVersion();
+        if(expected==Long.MAX_VALUE)throw new com.seeex.tech.common.exception.BizException(com.seeex.tech.common.api.ErrorCode.CONFLICT,"账号凭证版本无效");
         if (fresh) { row = new EmployeeAccountDO(); row.setEmployeeId(employeeId); }
         if (command.password() != null && !command.password().isBlank()) {
             if (command.password().length() < 8 || command.password().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) { throw new com.seeex.tech.common.exception.BizException(com.seeex.tech.common.api.ErrorCode.VALIDATION_FAILED, "密码至少 8 字符，UTF-8 不超过 72 字节"); }
             row.setPasswordHash(passwordEncoder.encode(command.password()));
         } else if (fresh) { throw new com.seeex.tech.common.exception.BizException(com.seeex.tech.common.api.ErrorCode.VALIDATION_FAILED, "新账号必须设置密码"); }
         row.setLoginPhone(command.loginPhone()); row.setStatus(command.status());
-        if (fresh) { accountMapper.insert(row); } else { accountMapper.updateById(row); }
+        row.setAuthVersion(fresh?0L:expected+1);
+        if (fresh) { accountMapper.insert(row); }
+        else if(accountMapper.update(row,new LambdaQueryWrapper<EmployeeAccountDO>().eq(EmployeeAccountDO::getId,row.getId()).eq(EmployeeAccountDO::getAuthVersion,expected))!=1)throw new com.seeex.tech.common.exception.BizException(com.seeex.tech.common.api.ErrorCode.CONFLICT,"账号已被其他管理员修改，请重新载入");
         if (revoke) { sessions.update(null, com.baomidou.mybatisplus.core.toolkit.Wrappers.<AuthTokenSessionDO>lambdaUpdate()
                 .eq(AuthTokenSessionDO::getSubjectId, String.valueOf(employeeId)).set(AuthTokenSessionDO::getStatus, "REVOKED").set(AuthTokenSessionDO::getRevokedAt, java.time.LocalDateTime.now(java.time.ZoneOffset.UTC))); }
         return account(employeeId);
     }
+    /** 仅在认证服务内传递，无原密码或摘要，不作为HTTP响应。 */
+    public record VerifiedAccount(Long accountId,Long employeeId,Long authVersion) { }
     /** 不含凭证的账号视图。 */
     public record AccountView(boolean exists, String loginPhone, String status) { }
     /** 账号维护表单。 */

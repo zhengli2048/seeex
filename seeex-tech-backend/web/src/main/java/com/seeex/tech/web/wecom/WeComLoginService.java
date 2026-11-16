@@ -8,7 +8,6 @@ import com.seeex.tech.web.organization.mapper.EmployeeMapper;
 import com.seeex.tech.web.organization.entity.EmployeeDO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -29,8 +28,7 @@ public class WeComLoginService {
         WeComOAuthStateDO row = new WeComOAuthStateDO(); row.setStateHash(hash(state)); row.setExpiresAt(LocalDateTime.now().plusMinutes(10)); states.insert(row);
         return new Authorize(client.authorizeUrl(state), state, 600);
     }
-    /** 验证浏览器 Cookie 和一次性状态，再交换身份。 */
-    @Transactional
+    /** 先以单条CAS提交消费状态，再在事务外回源身份；会话由独立服务事务签发。 */
     public TokenSessionService.TokenPair callback(String code, String state, String cookie) {
         if (state == null || cookie == null || !java.security.MessageDigest.isEqual(state.getBytes(StandardCharsets.UTF_8), cookie.getBytes(StandardCharsets.UTF_8))) { throw new BizException(ErrorCode.FORBIDDEN, "OAuth 状态不匹配，请重新登录"); }
         if (!settings.current().loginEnabled()) { throw new BizException(ErrorCode.FORBIDDEN, "企业微信登录已关闭"); }
